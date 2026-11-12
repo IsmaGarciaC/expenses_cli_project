@@ -1,2 +1,0 @@
-[console_scripts]
-expenses = expenses_cli.cli:main

@@ -1,5 +1,0 @@
-Metadata-Version: 2.4
-Name: expenses_tracker_cli
-Version: 0.1.0
-Summary: CLI para registrar y consultar gastos personales
-Requires-Python: >=3.10

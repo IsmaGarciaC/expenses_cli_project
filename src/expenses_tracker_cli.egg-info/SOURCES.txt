@@ -1,0 +1,7 @@
+pyproject.toml
+src/expenses_cli/cli.py
+src/expenses_tracker_cli.egg-info/PKG-INFO
+src/expenses_tracker_cli.egg-info/SOURCES.txt
+src/expenses_tracker_cli.egg-info/dependency_links.txt
+src/expenses_tracker_cli.egg-info/entry_points.txt
+src/expenses_tracker_cli.egg-info/top_level.txt

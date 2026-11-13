@@ -10,9 +10,18 @@ description = "CLI para registrar y consultar gastos personales"
 requires-python = ">=3.10"
 
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
+
 [project.scripts]
 expenses = "expenses_cli.cli:main"
 
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

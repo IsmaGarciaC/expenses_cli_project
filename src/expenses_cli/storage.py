@@ -26,3 +26,6 @@ def validate_data(data):
 
     if type(next_id) is not int or next_id <= 0:
         raise ValueError("next_id debe ser un entero positivo")
+
+    if "expenses" not in data:
+        raise ValueError("no existe la clave expenses")

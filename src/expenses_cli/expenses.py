@@ -77,5 +77,5 @@ def add_expense(path, description, amount):
 
 
 def list_expenses(path):
-    load_data = load_data(path)
-    return load_data["expenses"]
+    data = load_data(path)
+    return data["expenses"]

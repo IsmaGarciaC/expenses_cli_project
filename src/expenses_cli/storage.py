@@ -8,10 +8,8 @@ import json
 def load_data(path):
     try:
         with open(path, encoding="utf-8") as f:
-            result = json.load(f)
-            return result
+            return json.load(f)
     except FileNotFoundError:
         return {"next_id": 1, "expenses": []}
     except json.JSONDecodeError:
-        error = "El archivo esta Corrupto"
-        raise error
+        raise ValueError("El archivo esta Corrupto")

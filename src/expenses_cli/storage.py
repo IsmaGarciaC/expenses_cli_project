@@ -24,5 +24,5 @@ def validate_data(data):
 
     next_id = data["next_id"]
 
-    if not type(next_id) is int or not next_id > 0:
-        raise ValueError("El id no es valido ya que no es entero o mayor a 0")
+    if type(next_id) is not int or next_id <= 0:
+        raise ValueError("next_id debe ser un entero positivo")

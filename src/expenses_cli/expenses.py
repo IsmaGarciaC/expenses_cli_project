@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation, localcontext
 from typing import TypedDict
 
-from storage.py import load_data, save_data
+from .storage import load_data, save_data
 
 
 class Expense(TypedDict):
@@ -70,6 +70,7 @@ def add_expenses(path, description, amount):
     data = load_data(path)
     next_id = data["next_id"]
     new_expense = create_expense(next_id, description, amount)
-    data.append(new_expense)
+    data["expenses".append(new_expense)]
+    data["next_id" + 1]
     save_data(path, data)
     return new_expense

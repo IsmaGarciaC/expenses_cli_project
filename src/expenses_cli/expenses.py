@@ -74,3 +74,8 @@ def add_expense(path, description, amount):
     data["next_id"] += 1
     save_data(path, data)
     return new_expense
+
+
+def list_expenses(path):
+    load_data = load_data(path)
+    return load_data["expenses"]

@@ -11,5 +11,5 @@ def load_data(path):
             return json.load(f)
     except FileNotFoundError:
         return {"next_id": 1, "expenses": []}
-    except json.JSONDecodeError:
-        raise ValueError("El archivo esta Corrupto")
+    except json.JSONDecodeError as exc:
+        raise ValueError("El archivo esta Corrupto") from exc

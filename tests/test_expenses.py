@@ -1,11 +1,15 @@
-"""Pruebas del modelo y sus validaciones, sin acceso a archivos."""
+"""Pruebas del modelo, sus validaciones y el registro con archivos aislados."""
 
+import json
 from datetime import date
 from decimal import Decimal, localcontext
+from pathlib import Path
 
 import pytest
 
+from expenses_cli import expenses, storage
 from expenses_cli.expenses import (
+    add_expense,
     create_expense,
     validate_amount,
     validate_description,
@@ -158,3 +162,168 @@ def test_rejects_invalid_descriptions(value: object) -> None:
 def test_rejects_invalid_amounts(value: object) -> None:
     with pytest.raises(ValueError):
         create_expense(1, "Almuerzo", value)
+
+
+def test_add_expense_creates_first_expense_when_file_is_missing(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    assert not path.exists()
+
+    before = date.today().isoformat()
+    expense = add_expense(path, "  Café  ", "1.50")
+    after = date.today().isoformat()
+
+    assert expense == {
+        "id": 1,
+        "description": "Café",
+        "amount_cents": 150,
+        "date": expense["date"],
+    }
+    assert expense["date"] in (before, after)
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "next_id": 2,
+        "expenses": [expense],
+    }
+
+
+def test_add_expense_assigns_consecutive_ids(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    created = [
+        add_expense(path, "Café", "1.50"),
+        add_expense(path, "Almuerzo", "15"),
+        add_expense(path, "Transporte", "0.75"),
+    ]
+
+    assert [expense["id"] for expense in created] == [1, 2, 3]
+    saved_data = json.loads(path.read_text(encoding="utf-8"))
+    assert [expense["id"] for expense in saved_data["expenses"]] == [1, 2, 3]
+    assert saved_data["next_id"] == 4
+
+
+def test_add_expense_persists_complete_expenses_between_calls(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    first = add_expense(path, "Café", "1.50")
+    first_saved_data = json.loads(path.read_text(encoding="utf-8"))
+    assert first_saved_data == {"next_id": 2, "expenses": [first]}
+
+    second = add_expense(Path(str(path)), "Almuerzo", "15.50")
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "next_id": 3,
+        "expenses": [first_saved_data["expenses"][0], second],
+    }
+
+
+def test_add_expense_uses_saved_next_id_and_preserves_existing_history(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    previous_expense = {
+        "id": 3,
+        "description": "Compra anterior",
+        "amount_cents": 250,
+        "date": "2024-02-29",
+    }
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": [previous_expense]}),
+        encoding="utf-8",
+    )
+
+    expense = add_expense(path, "Café", "1.50")
+
+    assert expense["id"] == 8
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "next_id": 9,
+        "expenses": [previous_expense, expense],
+    }
+
+
+@pytest.mark.parametrize("existing", (False, True))
+@pytest.mark.parametrize(
+    "description, amount",
+    [
+        ("", "15"),
+        ("   ", "15"),
+        (None, "15"),
+        (15, "15"),
+        (True, "15"),
+        ("Almuerzo", "abc"),
+        ("Almuerzo", "0"),
+        ("Almuerzo", "-1"),
+        ("Almuerzo", "1.001"),
+        ("Almuerzo", "NaN"),
+        ("Almuerzo", "Infinity"),
+        ("Almuerzo", True),
+    ],
+)
+def test_add_expense_rejects_invalid_input_without_changing_file(
+    tmp_path: Path, existing: bool, description: object, amount: object,
+) -> None:
+    path = tmp_path / "expenses.json"
+    if existing:
+        add_expense(path, "Compra anterior", "2.50")
+        original = path.read_bytes()
+
+    with pytest.raises(ValueError):
+        add_expense(path, description, amount)
+
+    if existing:
+        assert path.read_bytes() == original
+        assert list(tmp_path.iterdir()) == [path]
+    else:
+        assert not path.exists()
+        assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("existing", (False, True))
+@pytest.mark.parametrize("operation", ("load_data", "save_data"))
+def test_add_expense_propagates_storage_errors_without_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, existing: bool, operation: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    if existing:
+        add_expense(path, "Compra anterior", "2.50")
+        original = path.read_bytes()
+    failure = OSError(f"simulated {operation} failure")
+
+    def failing_storage(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(expenses, operation, failing_storage)
+
+    with pytest.raises(OSError) as error:
+        add_expense(path, "Café", "1.50")
+
+    assert error.value is failure
+    if existing:
+        assert path.read_bytes() == original
+    else:
+        assert not path.exists()
+
+
+def test_add_expense_propagates_replace_failure_and_preserves_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "expenses.json"
+    add_expense(path, "Compra anterior", "2.50")
+    original = path.read_bytes()
+    failure = OSError("simulated replace failure")
+
+    def failing_replace(source, destination):
+        raise failure
+
+    monkeypatch.setattr(storage.os, "replace", failing_replace)
+
+    with pytest.raises(OSError) as error:
+        add_expense(path, "Café", "1.50")
+
+    assert error.value is failure
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_add_expense_rejects_corrupt_history_without_overwriting_it(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    original = b'{"next_id": '
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError):
+        add_expense(path, "Café", "1.50")
+
+    assert path.read_bytes() == original

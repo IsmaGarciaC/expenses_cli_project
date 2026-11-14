@@ -3,21 +3,14 @@ en formato JSON."""
 
 import json
 
-path = "gastos.json"
-
 
 # Leer el archivo JSON si existe
 def load_data(path):
     try:
         with open("gastos.json", encoding="utf-8") as f:
             json.load(f)
-            try:
-                with open("gastos.json", encoding="utf-8") as f:
-                    json.load(f)
-            except json.JSONDecodeError as error:
-                print(error)
-
-            json.dump(f)
-
-    except FileNotFoundError as error:
-        print({"next_id": 1, "expenses": []})
+            return f
+    except FileNotFoundError:
+        return {"next_id": 1, "expenses": []}
+    except json.JSONDecodeError:
+        return "El archivo esta Corrupto"

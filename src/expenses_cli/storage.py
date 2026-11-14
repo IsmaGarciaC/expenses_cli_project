@@ -7,10 +7,11 @@ import json
 # Leer el archivo JSON si existe
 def load_data(path):
     try:
-        with open("gastos.json", encoding="utf-8") as f:
-            json.load(f)
-            return f
+        with open(path, encoding="utf-8") as f:
+            result = json.load(f)
+            return result
     except FileNotFoundError:
         return {"next_id": 1, "expenses": []}
     except json.JSONDecodeError:
-        return "El archivo esta Corrupto"
+        error = "El archivo esta Corrupto"
+        raise error

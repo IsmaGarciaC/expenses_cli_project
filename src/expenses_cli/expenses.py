@@ -66,11 +66,11 @@ def create_expense(expense_id: object, description: object, amount: object) -> E
     }
 
 
-def add_expenses(path, description, amount):
+def add_expense(path, description, amount):
     data = load_data(path)
     next_id = data["next_id"]
     new_expense = create_expense(next_id, description, amount)
     data["expenses"].append(new_expense)
-    data["next_id"] = data["next_id"] + 1
+    data["next_id"] += 1
     save_data(path, data)
     return new_expense

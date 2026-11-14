@@ -11,6 +11,7 @@ from expenses_cli import expenses, storage
 from expenses_cli.expenses import (
     add_expense,
     create_expense,
+    list_expenses,
     validate_amount,
     validate_description,
 )
@@ -325,5 +326,109 @@ def test_add_expense_rejects_corrupt_history_without_overwriting_it(tmp_path: Pa
 
     with pytest.raises(ValueError):
         add_expense(path, "Café", "1.50")
+
+    assert path.read_bytes() == original
+
+
+@pytest.fixture
+def saved_expenses() -> list[dict]:
+    return [
+        {"id": 5, "description": "Café", "amount_cents": 150, "date": "2024-02-29"},
+        {"id": 2, "description": "Almuerzo", "amount_cents": 1550, "date": "2026-11-14"},
+        {"id": 7, "description": "Transporte", "amount_cents": 75, "date": "2026-11-15"},
+    ]
+
+
+def test_list_expenses_returns_empty_list_when_file_is_missing(tmp_path: Path) -> None:
+    path = tmp_path / "missing" / "expenses.json"
+
+    assert list_expenses(path) == []
+    assert not path.exists()
+    assert not path.parent.exists()
+
+
+@pytest.mark.parametrize("count", (0, 1, 3))
+def test_list_expenses_returns_all_saved_expenses(
+    tmp_path: Path, saved_expenses: list[dict], count: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    expected = saved_expenses[:count]
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": expected}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert list_expenses(path) == expected
+
+
+def test_list_expenses_does_not_modify_json_or_save_data(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "expenses.json"
+    data = {"next_id": 8, "expenses": saved_expenses}
+    original = (json.dumps(data, ensure_ascii=True, indent=4) + "\n").encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Consultar gastos no debe llamar a save_data")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    for _ in range(2):
+        assert list_expenses(path) == saved_expenses
+        assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize(
+    "failure", (OSError("simulated read failure"), PermissionError("access denied"))
+)
+def test_list_expenses_propagates_storage_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: OSError,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = b'{"next_id": 1, "expenses": []}'
+    path.write_bytes(original)
+
+    def failing_load(received_path):
+        assert received_path == path
+        raise failure
+
+    monkeypatch.setattr(expenses, "load_data", failing_load)
+
+    with pytest.raises(type(failure)) as error:
+        list_expenses(path)
+
+    assert error.value is failure
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("content", ("", "{", '{"expenses": []', "not json"))
+def test_list_expenses_propagates_corrupt_json_error_without_changing_file(
+    tmp_path: Path, content: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = content.encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match="Corrupto") as error:
+        list_expenses(path)
+
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "data", ({}, {"next_id": 1, "expenses": {}}, {"next_id": 1, "expenses": [{}]})
+)
+def test_list_expenses_propagates_invalid_history_error_without_changing_file(
+    tmp_path: Path, data: dict,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps(data).encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError):
+        list_expenses(path)
 
     assert path.read_bytes() == original

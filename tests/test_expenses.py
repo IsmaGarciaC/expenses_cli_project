@@ -11,6 +11,7 @@ from expenses_cli import expenses, storage
 from expenses_cli.expenses import (
     add_expense,
     create_expense,
+    get_expense,
     list_expenses,
     validate_amount,
     validate_description,
@@ -430,5 +431,153 @@ def test_list_expenses_propagates_invalid_history_error_without_changing_file(
 
     with pytest.raises(ValueError):
         list_expenses(path)
+
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("index", (0, 1, 2), ids=("first", "middle", "last"))
+def test_get_expense_returns_complete_expense_by_id(
+    tmp_path: Path, saved_expenses: list[dict], index: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": saved_expenses}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    expected = saved_expenses[index]
+
+    assert get_expense(path, expected["id"]) == expected
+
+
+@pytest.mark.parametrize("expense_id", (1, 3, 8, 999))
+def test_get_expense_raises_when_id_is_missing(
+    tmp_path: Path, saved_expenses: list[dict], expense_id: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": saved_expenses}), encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        get_expense(path, expense_id)
+
+
+@pytest.mark.parametrize("next_id", (1, 20))
+def test_get_expense_raises_for_empty_history(tmp_path: Path, next_id: int) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps({"next_id": next_id, "expenses": []}).encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        get_expense(path, 1)
+
+    assert path.read_bytes() == original
+
+
+def test_get_expense_raises_for_missing_file_without_creating_it(tmp_path: Path) -> None:
+    path = tmp_path / "missing" / "expenses.json"
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        get_expense(path, 1)
+
+    assert not path.parent.exists()
+
+
+@pytest.mark.parametrize("expense_id", (5, 2, 7, 999))
+def test_get_expense_does_not_modify_json_or_save_data(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+    expense_id: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    data = {"next_id": 8, "expenses": saved_expenses}
+    original = (json.dumps(data, ensure_ascii=True, indent=4) + "\n").encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Consultar un gasto no debe llamar a save_data")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    for _ in range(2):
+        if expense_id == 999:
+            with pytest.raises(ValueError, match="Gasto no encontrado"):
+                get_expense(path, expense_id)
+        else:
+            expected = next(item for item in saved_expenses if item["id"] == expense_id)
+            assert get_expense(path, expense_id) == expected
+        assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize(
+    "failure", (OSError("simulated read failure"), PermissionError("access denied"))
+)
+def test_get_expense_propagates_storage_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: OSError,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = b'{"next_id": 1, "expenses": []}'
+    path.write_bytes(original)
+
+    def failing_load(received_path):
+        assert received_path == path
+        raise failure
+
+    monkeypatch.setattr(expenses, "load_data", failing_load)
+
+    with pytest.raises(type(failure)) as error:
+        get_expense(path, 1)
+
+    assert error.value is failure
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("content", ("", "{", '{"expenses": []', "not json"))
+def test_get_expense_propagates_corrupt_json_error_without_changing_file(
+    tmp_path: Path, content: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = content.encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match="Corrupto") as error:
+        get_expense(path, 1)
+
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "data", ({}, {"next_id": 1, "expenses": {}}, {"next_id": 1, "expenses": [{}]})
+)
+def test_get_expense_propagates_invalid_history_error_without_changing_file(
+    tmp_path: Path, data: dict,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps(data).encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError):
+        get_expense(path, 1)
+
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "expense_id", (0, -1, True, False, "1", 1.0, Decimal("1"), None, [], {}),
+    ids=("zero", "negative", "true", "false", "string", "float", "decimal",
+         "none", "list", "dict"),
+)
+def test_get_expense_rejects_invalid_id_types(
+    tmp_path: Path, saved_expenses: list[dict], expense_id: object,
+) -> None:
+    path = tmp_path / "expenses.json"
+    expense = dict(saved_expenses[0], id=1)
+    original = json.dumps({"next_id": 2, "expenses": [expense]}).encode("utf-8")
+    path.write_bytes(original)
+
+    # Mismo contrato de entero positivo que create_expense y storage.validate_data.
+    with pytest.raises(ValueError):
+        get_expense(path, expense_id)
 
     assert path.read_bytes() == original

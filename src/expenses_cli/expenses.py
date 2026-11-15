@@ -79,3 +79,13 @@ def add_expense(path, description, amount):
 def list_expenses(path):
     data = load_data(path)
     return data["expenses"]
+
+
+def get_expense(path, expense_id):
+    if type(expense_id) is not int or expense_id <= 0:
+        raise ValueError("ID no valido")
+    data = load_data(path)
+    for expense in data["expenses"]:
+        if expense["id"] == expense_id:
+            return expense
+    raise ValueError("Gasto no encontrado")

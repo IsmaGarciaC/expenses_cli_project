@@ -11,6 +11,7 @@ from expenses_cli import expenses, storage
 from expenses_cli.expenses import (
     add_expense,
     create_expense,
+    delete_expense,
     get_expense,
     list_expenses,
     validate_amount,
@@ -581,3 +582,208 @@ def test_get_expense_rejects_invalid_id_types(
         get_expense(path, expense_id)
 
     assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("index", (0, 1, 2), ids=("first", "second", "last"))
+@pytest.mark.parametrize("next_id", (8, 20))
+def test_delete_expense_removes_only_requested_expense_and_preserves_next_id(
+    tmp_path: Path, saved_expenses: list[dict], index: int, next_id: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    path.write_text(
+        json.dumps({"next_id": next_id, "expenses": saved_expenses}),
+        encoding="utf-8",
+    )
+    expected_expenses = saved_expenses[:index] + saved_expenses[index + 1:]
+
+    result = delete_expense(path, saved_expenses[index]["id"])
+
+    assert result is True
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "next_id": next_id,
+        "expenses": expected_expenses,
+    }
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_delete_expense_can_remove_the_only_expense(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    expense = add_expense(path, "Café", "1.50")
+
+    assert delete_expense(path, expense["id"]) is True
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "next_id": 2,
+        "expenses": [],
+    }
+
+
+@pytest.mark.parametrize("expense_id", (1, 3, 8, 999))
+def test_delete_expense_rejects_missing_id_without_changing_file(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+    expense_id: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = (
+        json.dumps({"next_id": 8, "expenses": saved_expenses}, indent=4) + "\n"
+    ).encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Un ID inexistente no debe provocar un guardado")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        delete_expense(path, expense_id)
+
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize(
+    "expense_id", (0, -1, True, False, "1", "", 1.0, 1.5, Decimal("1"), None, [], {}),
+    ids=("zero", "negative", "true", "false", "string", "empty-string",
+         "float", "fractional", "decimal", "none", "list", "dict"),
+)
+def test_delete_expense_rejects_invalid_ids_without_changing_file(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+    expense_id: object,
+) -> None:
+    path = tmp_path / "expenses.json"
+    # El ID 1 permite detectar si True, 1.0 o Decimal("1") eliminan por igualdad.
+    saved_expenses[0]["id"] = 1
+    original = json.dumps({"next_id": 8, "expenses": saved_expenses}).encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Un ID inválido no debe provocar un guardado")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    with pytest.raises(ValueError):
+        delete_expense(path, expense_id)
+
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_delete_expense_rejects_empty_history_without_changing_file(tmp_path: Path) -> None:
+    path = tmp_path / "expenses.json"
+    original = b'{"next_id": 20, "expenses": []}\n'
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        delete_expense(path, 1)
+
+    assert path.read_bytes() == original
+
+
+def test_delete_expense_rejects_missing_file_without_creating_it(tmp_path: Path) -> None:
+    path = tmp_path / "missing" / "expenses.json"
+
+    with pytest.raises(ValueError, match="Gasto no encontrado"):
+        delete_expense(path, 1)
+
+    assert not path.parent.exists()
+
+
+@pytest.mark.parametrize("operation", ("load_data", "save_data"))
+@pytest.mark.parametrize(
+    "failure", (OSError("simulated storage failure"), PermissionError("access denied"))
+)
+def test_delete_expense_propagates_storage_errors_and_preserves_original(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+    operation: str, failure: OSError,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps({"next_id": 8, "expenses": saved_expenses}).encode("utf-8")
+    path.write_bytes(original)
+
+    def failing_storage(received_path, *args):
+        assert received_path == path
+        raise failure
+
+    monkeypatch.setattr(expenses, operation, failing_storage)
+
+    with pytest.raises(type(failure)) as error:
+        delete_expense(path, 2)
+
+    assert error.value is failure
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_delete_expense_preserves_original_when_replace_fails(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps({"next_id": 8, "expenses": saved_expenses}).encode("utf-8")
+    path.write_bytes(original)
+    failure = OSError("simulated replace failure")
+
+    def failing_replace(source, destination):
+        assert destination == path
+        assert path.read_bytes() == original
+        # El temporal contiene la eliminación, pero aún no se ha guardado en destino.
+        assert json.loads(source.read_text(encoding="utf-8")) == {
+            "next_id": 8,
+            "expenses": [saved_expenses[0], saved_expenses[2]],
+        }
+        raise failure
+
+    monkeypatch.setattr(storage.os, "replace", failing_replace)
+
+    with pytest.raises(OSError) as error:
+        delete_expense(path, 2)
+
+    assert error.value is failure
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize("content", ("", "{", '{"expenses": []', "not json"))
+def test_delete_expense_does_not_overwrite_corrupt_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, content: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = content.encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Un historial corrupto no debe provocar un guardado")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    with pytest.raises(ValueError, match="Corrupto") as error:
+        delete_expense(path, 1)
+
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_delete_expense_returns_true_only_after_saving(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps({"next_id": 8, "expenses": saved_expenses}).encode("utf-8")
+    path.write_bytes(original)
+    expected = {"next_id": 8, "expenses": [saved_expenses[0], saved_expenses[2]]}
+    real_save = expenses.save_data
+    saved_paths = []
+
+    def checked_save(received_path, data):
+        assert received_path == path
+        assert path.read_bytes() == original
+        assert data == expected
+        real_save(received_path, data)
+        assert json.loads(path.read_text(encoding="utf-8")) == expected
+        saved_paths.append(received_path)
+
+    monkeypatch.setattr(expenses, "save_data", checked_save)
+
+    result = delete_expense(path, 2)
+
+    assert result is True
+    assert saved_paths == [path]
+    assert json.loads(path.read_text(encoding="utf-8")) == expected

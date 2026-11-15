@@ -89,3 +89,15 @@ def get_expense(path, expense_id):
         if expense["id"] == expense_id:
             return expense
     raise ValueError("Gasto no encontrado")
+
+
+def delete_expense(path, expense_id):
+    if type(expense_id) is not int or expense_id <= 0:
+        raise ValueError("ID no valido")
+    data = load_data(path)
+    for index, expense in enumerate(data["expenses"]):
+        if expense["id"] == expense_id:
+            data["expenses"].pop(index)
+            save_data(path, data)
+            return True
+    raise ValueError("Gasto no encontrado")

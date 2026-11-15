@@ -83,7 +83,7 @@ def list_expenses(path):
 
 def get_expense(path, expense_id):
     data = load_data(path)
-    for expense in data:
-        if data["id"] == expense_id:
+    for expense in data["expenses"]:
+        if expense["id"] == expense_id:
             return expense
-        raise ValueError("Gasto no encontrado")
+    raise ValueError("Gasto no encontrado")

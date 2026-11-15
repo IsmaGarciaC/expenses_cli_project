@@ -82,9 +82,9 @@ def list_expenses(path):
 
 
 def get_expense(path, expense_id):
-    data = load_data(path)
-    if type(expense_id) is not int:
+    if type(expense_id) is not int or expense_id <= 0:
         raise ValueError("ID no valido")
+    data = load_data(path)
     for expense in data["expenses"]:
         if expense["id"] == expense_id:
             return expense

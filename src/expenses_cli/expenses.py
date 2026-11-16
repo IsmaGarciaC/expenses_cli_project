@@ -101,3 +101,9 @@ def delete_expense(path, expense_id):
             save_data(path, data)
             return True
     raise ValueError("Gasto no encontrado")
+
+
+def total_expenses(path):
+    data = load_data(path)
+    total = sum(expense["amount_cents"] for expense in data["expenses"])
+    return total

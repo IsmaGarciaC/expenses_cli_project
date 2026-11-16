@@ -14,6 +14,7 @@ from expenses_cli.expenses import (
     delete_expense,
     get_expense,
     list_expenses,
+    total_expenses,
     validate_amount,
     validate_description,
 )
@@ -787,3 +788,134 @@ def test_delete_expense_returns_true_only_after_saving(
     assert result is True
     assert saved_paths == [path]
     assert json.loads(path.read_text(encoding="utf-8")) == expected
+
+
+@pytest.mark.parametrize("count, expected", ((0, 0), (1, 150), (3, 1775)))
+def test_total_expenses_returns_integer_sum_for_saved_history(
+    tmp_path: Path, saved_expenses: list[dict], count: int, expected: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": saved_expenses[:count]}),
+        encoding="utf-8",
+    )
+
+    result = total_expenses(path)
+
+    assert type(result) is int
+    assert result == expected
+
+
+def test_total_expenses_returns_zero_for_missing_file_without_creating_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "missing" / "expenses.json"
+
+    result = total_expenses(path)
+
+    assert type(result) is int
+    assert result == 0
+    assert not path.exists()
+    assert not path.parent.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "amounts, expected",
+    (
+        ((10, 20, 1), 31),
+        # Superar 2**53 permite detectar pérdidas de precisión al convertir a float.
+        ((9007199254740993, 1, 1), 9007199254740995),
+    ),
+)
+def test_total_expenses_preserves_exact_integer_cents(
+    tmp_path: Path, saved_expenses: list[dict], amounts: tuple[int, ...], expected: int,
+) -> None:
+    path = tmp_path / "expenses.json"
+    for expense, amount in zip(saved_expenses, amounts):
+        expense["amount_cents"] = amount
+    path.write_text(
+        json.dumps({"next_id": 8, "expenses": saved_expenses}), encoding="utf-8",
+    )
+
+    result = total_expenses(path)
+
+    assert type(result) is int
+    assert result == expected
+
+
+def test_total_expenses_does_not_modify_json_or_save_data(
+    tmp_path: Path, saved_expenses: list[dict], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "expenses.json"
+    data = {"next_id": 8, "expenses": saved_expenses}
+    original = (json.dumps(data, ensure_ascii=True, indent=4) + "\n").encode("utf-8")
+    path.write_bytes(original)
+
+    def unexpected_save(*args, **kwargs):
+        pytest.fail("Calcular el total no debe llamar a save_data")
+
+    monkeypatch.setattr(expenses, "save_data", unexpected_save)
+
+    assert total_expenses(path) == 1775
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.parametrize("content", ("", "{", '{"expenses": []', "not json"))
+def test_total_expenses_propagates_corrupt_json_error_without_changing_file(
+    tmp_path: Path, content: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = content.encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match="Corrupto") as error:
+        total_expenses(path)
+
+    assert isinstance(error.value.__cause__, json.JSONDecodeError)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "data, message",
+    (
+        ({}, "next_id"),
+        ({"next_id": 1, "expenses": {}}, "lista"),
+        ({"next_id": 1, "expenses": [{}]}, "Faltan campos"),
+    ),
+)
+def test_total_expenses_propagates_invalid_history_error_without_changing_file(
+    tmp_path: Path, data: dict, message: str,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = json.dumps(data).encode("utf-8")
+    path.write_bytes(original)
+
+    with pytest.raises(ValueError, match=message):
+        total_expenses(path)
+
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "failure", (OSError("simulated read failure"), PermissionError("access denied"))
+)
+def test_total_expenses_propagates_storage_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: OSError,
+) -> None:
+    path = tmp_path / "expenses.json"
+    original = b'{"next_id": 1, "expenses": []}'
+    path.write_bytes(original)
+
+    def failing_load(received_path):
+        assert received_path == path
+        raise failure
+
+    monkeypatch.setattr(expenses, "load_data", failing_load)
+
+    with pytest.raises(type(failure)) as error:
+        total_expenses(path)
+
+    assert error.value is failure
+    assert path.read_bytes() == original

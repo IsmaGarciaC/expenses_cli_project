@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 
 def main():
@@ -27,3 +28,8 @@ def main():
     subparsers.add_parser("total", help="Mostrar el total de los gastos")
 
     args = parser.parse_args()
+
+
+def get_data_path():
+    path = Path.home() / ".local" / "share" / "expenses_tracker_cli" / "expenses.json"
+    return path

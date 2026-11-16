@@ -1,6 +1,8 @@
 import argparse
 from pathlib import Path
 
+from .expenses import list_expenses
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -28,6 +30,10 @@ def main():
     subparsers.add_parser("total", help="Mostrar el total de los gastos")
 
     args = parser.parse_args()
+    if isinstance("args.command", list):
+        path = get_data_path()
+        list_expenses = list_expenses(path)
+        print(list_expenses)
 
 
 def get_data_path():

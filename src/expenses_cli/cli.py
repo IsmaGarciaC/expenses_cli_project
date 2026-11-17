@@ -40,14 +40,14 @@ def main():
     if args.command == "list":
         path = get_data_path()
         show_expenses = list_expenses(path)
-        if sum(show_expenses["cents"]) == 0:
+        if not show_expenses:
             print("No hay gastos registrados")
         else:
             print("Historial de Gastos")
             print(" ")
-            for expense in show_expenses["expenses"]:
+            for expense in show_expenses:
                 print(
-                    f"{show_expenses['id']} | {show_expenses['date']} | {show_expenses['description']} | {show_expenses['amount']}"
+                    f"{expense['id']} | {expense['date']} | {expense['description']} | {(expense['amount_cents']) / 100:.2f}"
                 )
     elif args.command == "add":
         path = get_data_path()

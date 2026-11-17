@@ -57,7 +57,7 @@ def main():
     elif args.command == "total":
         path = get_data_path()
         total = total_expenses(path) / 100
-        print(f"El total de los gastos es: ${total:2f}")
+        print(f"El total de los gastos es: ${total:.2f}")
 
 
 def get_data_path():

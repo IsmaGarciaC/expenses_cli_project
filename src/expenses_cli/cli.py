@@ -30,10 +30,10 @@ def main():
     subparsers.add_parser("total", help="Mostrar el total de los gastos")
 
     args = parser.parse_args()
-    if isinstance("args.command", list):
+    if args.command == "list":
         path = get_data_path()
-        list_expenses = list_expenses(path)
-        print(list_expenses)
+        list_expenses_command = list_expenses(path)
+        print(list_expenses_command)
 
 
 def get_data_path():

@@ -36,10 +36,19 @@ def main():
     subparsers.add_parser("total", help="Mostrar el total de los gastos")
 
     args = parser.parse_args()
+
     if args.command == "list":
         path = get_data_path()
         show_expenses = list_expenses(path)
-        print(show_expenses)
+        if sum(show_expenses["cents"]) == 0:
+            print("No hay gastos registrados")
+        else:
+            print("Historial de Gastos")
+            print(" ")
+            for expense in show_expenses["expenses"]:
+                print(
+                    f"{show_expenses['id']} | {show_expenses['date']} | {show_expenses['description']} | {show_expenses['amount']}"
+                )
     elif args.command == "add":
         path = get_data_path()
         new_expense = add_expense(path, args.description, args.amount)

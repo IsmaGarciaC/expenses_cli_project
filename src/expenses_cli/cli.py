@@ -37,42 +37,43 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "list":
+    try:
         path = get_data_path()
-        show_expenses = list_expenses(path)
-        if not show_expenses:
-            print("No hay gastos registrados")
-        else:
-            print("Historial de Gastos")
+        if args.command == "list":
+            show_expenses = list_expenses(path)
+            if not show_expenses:
+                print("No hay gastos registrados")
+            else:
+                print("Historial de Gastos")
+                print()
+                for expense in show_expenses:
+                    print(
+                        f"#{expense['id']} | {expense['date']} | {expense['description']} | ${expense['amount_cents'] / 100:.2f}"
+                    )
+        elif args.command == "add":
+            new_expense = add_expense(path, args.description, args.amount)
+            print(
+                f"Gasto {new_expense['id']} {new_expense['description']} agregado correctamente"
+            )
+        elif args.command == "get":
+            expense = get_expense(path, args.id)
+            print("Detalle del gasto:")
             print()
-            for expense in show_expenses:
-                print(
-                    f"#{expense['id']} | {expense['date']} | {expense['description']} | ${expense['amount_cents'] / 100:.2f}"
-                )
-    elif args.command == "add":
-        path = get_data_path()
-        new_expense = add_expense(path, args.description, args.amount)
-        print(
-            f"Gasto {new_expense['id']} {new_expense['description']} agregado correctamente"
-        )
-    elif args.command == "get":
-        path = get_data_path()
-        expense = get_expense(path, args.id)
-        print("Detalle del gasto:")
-        print()
-        print(f"ID: {expense['id']}")
-        print(f"Fecha: {expense['date']}")
-        print(f"Descripción: {expense['description']}")
-        print(f"Importe: ${expense['amount_cents'] / 100:.2f}")
+            print(f"ID: {expense['id']}")
+            print(f"Fecha: {expense['date']}")
+            print(f"Descripción: {expense['description']}")
+            print(f"Importe: ${expense['amount_cents'] / 100:.2f}")
 
-    elif args.command == "delete":
-        path = get_data_path()
-        delete_expense(path, args.id)
-        print(f"Gasto #{args.id} eliminado correctamente")
-    elif args.command == "total":
-        path = get_data_path()
-        total = total_expenses(path) / 100
-        print(f"El total de los gastos es: ${total:.2f}")
+        elif args.command == "delete":
+            delete_expense(path, args.id)
+            print(f"Gasto #{args.id} eliminado correctamente")
+        elif args.command == "total":
+            total = total_expenses(path) / 100
+            print(f"El total de los gastos es: ${total:.2f}")
+    except ValueError as exc:
+        parser.error(str(exc))
+    except OSError as exc:
+        parser.error(f"No se pudo acceder al almacenamiento: {exc}")
 
 
 def get_data_path():

@@ -1,4 +1,4 @@
-# expenses_tracker_cli
+# Expenses CLI - Gestor de Gastos Personales
 
 Una herramienta de terminal en Python para registrar gastos personales, consultar
 el historial y saber cuánto has gastado. Está diseñada para personas que usan la

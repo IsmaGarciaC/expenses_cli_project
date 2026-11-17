@@ -1,15 +1,29 @@
-"""Capa de persistencia leyendo el modelo proveniente de expenses.py y guardandolo en disco
-en formato JSON."""
+"""Lee, valida y guarda el historial de gastos en formato JSON."""
 
 import json
 import os
 from datetime import date
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import TYPE_CHECKING, TypedDict, cast
+
+if TYPE_CHECKING:
+    from .expenses import Expense
 
 
-# Leer el archivo JSON si existe
-def load_data(path: str | Path) -> dict[str, object]:
+class ExpenseHistory(TypedDict):
+    """Representa el historial con el siguiente ID y sus gastos vigentes."""
+
+    next_id: int
+    expenses: list["Expense"]
+
+
+def load_data(path: str | Path) -> ExpenseHistory:
+    """Lee un historial validado o devuelve uno vacío si el archivo no existe.
+
+    Lanza ValueError si el JSON está corrupto o el historial no es válido.
+    Propaga OSError si ocurre otro error de lectura.
+    """
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -21,8 +35,12 @@ def load_data(path: str | Path) -> dict[str, object]:
     return validate_data(data)
 
 
-def validate_data(data: object) -> dict[str, object]:
-    """Valida el historial completo y lo devuelve sin modificarlo."""
+def validate_data(data: object) -> ExpenseHistory:
+    """Valida el historial completo y devuelve el mismo diccionario.
+
+    Conserva los campos adicionales. Lanza ValueError si la estructura,
+    los gastos o el siguiente ID no cumplen las reglas del historial.
+    """
 
     if not isinstance(data, dict):
         raise ValueError("La estructura principal debe ser un diccionario")
@@ -42,7 +60,7 @@ def validate_data(data: object) -> dict[str, object]:
         raise ValueError("expenses no es una lista")
 
     required_fields = {"id", "description", "amount_cents", "date"}
-    seen_ids = set()
+    seen_ids: set[int] = set()
 
     for expense in data["expenses"]:
         if not isinstance(expense, dict):
@@ -90,17 +108,22 @@ def validate_data(data: object) -> dict[str, object]:
     if seen_ids and next_id <= max(seen_ids):
         raise ValueError("next_id debe ser mayor que todos los IDs existentes")
 
-    return data
+    return cast(ExpenseHistory, data)
 
 
 def save_data(path: str | Path, data: object) -> None:
-    """Guarda un historial válido mediante un reemplazo atómico del destino."""
+    """Guarda un historial válido mediante un reemplazo atómico del destino.
+
+    Crea los directorios necesarios y elimina el temporal al finalizar.
+    Lanza ValueError si el historial no es válido, TypeError si contiene
+    valores no serializables y propaga OSError de escritura o limpieza.
+    """
     validated_data = validate_data(data)
     content = json.dumps(validated_data, ensure_ascii=False, indent=2)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    temporary_path = None
+    temporary_path: Path | None = None
     try:
         with NamedTemporaryFile(
             mode="w",

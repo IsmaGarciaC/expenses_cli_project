@@ -47,7 +47,7 @@ def main():
             print()
             for expense in show_expenses:
                 print(
-                    f"#{expense['id']} | {expense['date']} | {expense['description']} | {expense['amount_cents'] / 100:.2f}"
+                    f"#{expense['id']} | ${expense['date']} | {expense['description']} | {expense['amount_cents'] / 100:.2f}"
                 )
     elif args.command == "add":
         path = get_data_path()
@@ -63,7 +63,7 @@ def main():
         print(f"ID: {expense['id']}")
         print(f"Fecha: {expense['date']}")
         print(f"Descripcion: {expense['description']}")
-        print(f"Importe: {expense['amount_cents'] / 100:.2f}")
+        print(f"Importe: ${expense['amount_cents'] / 100:.2f}")
 
     elif args.command == "delete":
         path = get_data_path()

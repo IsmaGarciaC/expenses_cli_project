@@ -1,7 +1,13 @@
 import argparse
 from pathlib import Path
 
-from .expenses import add_expense, delete_expense, get_expense, list_expenses
+from .expenses import (
+    add_expense,
+    delete_expense,
+    get_expense,
+    list_expenses,
+    total_expenses,
+)
 
 
 def main():
@@ -48,6 +54,10 @@ def main():
         path = get_data_path()
         delete_expense(path, args.id)
         print(f"Gasto #{args.id} eliminado correctamente")
+    elif args.command == "total":
+        path = get_data_path()
+        total = total_expenses(path) / 100
+        print(f"El total de los gastos es: ${total:2f}")
 
 
 def get_data_path():

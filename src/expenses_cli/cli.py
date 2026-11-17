@@ -1,7 +1,7 @@
 import argparse
 from pathlib import Path
 
-from .expenses import list_expenses
+from .expenses import add_expense, list_expenses
 
 
 def main():
@@ -34,6 +34,12 @@ def main():
         path = get_data_path()
         list_expenses_command = list_expenses(path)
         print(list_expenses_command)
+    elif args.command == "add":
+        path = get_data_path()
+        new_expense = add_expense(path, args.description, args.amount)
+        print(
+            f"Gasto {new_expense['id']} {new_expense['description']} agregado correctamente"
+        )
 
 
 def get_data_path():

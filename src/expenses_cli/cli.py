@@ -62,7 +62,7 @@ def main():
         print()
         print(f"ID: {expense['id']}")
         print(f"Fecha: {expense['date']}")
-        print(f"Descripcion: {expense['description']}")
+        print(f"Descripción: {expense['description']}")
         print(f"Importe: ${expense['amount_cents'] / 100:.2f}")
 
     elif args.command == "delete":

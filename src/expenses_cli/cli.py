@@ -58,7 +58,13 @@ def main():
     elif args.command == "get":
         path = get_data_path()
         expense = get_expense(path, args.id)
-        print(expense)
+        print("Detalle del gasto:")
+        print()
+        print(f"ID: {expense['id']}")
+        print(f"Fecha: {expense['date']}")
+        print(f"Descripcion: {expense['description']}")
+        print(f"Importe: {expense['amount_cents'] / 100:.2f}")
+
     elif args.command == "delete":
         path = get_data_path()
         delete_expense(path, args.id)
